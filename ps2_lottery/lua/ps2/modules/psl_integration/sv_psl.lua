@@ -214,8 +214,7 @@ function PlayerLeavesServer( ply )
 end
 hook.Add( "PlayerDisconnected", "PSLplayerleavesserver", PlayerLeavesServer )
 
-net.Receive( "LotteryMenu", function( len )
-	local ply = net.ReadEntity()
+net.Receive( "LotteryMenu", function( len, ply )
 	local number = net.ReadInt(16)
 	PSLottery:CheckNumber(ply, number)
 end )
