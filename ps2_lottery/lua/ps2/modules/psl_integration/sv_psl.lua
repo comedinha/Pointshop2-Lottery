@@ -1,14 +1,10 @@
 PSLottery = {}
-lastwinners = {}
-numberwinners = {}
 
 PSLottery.MaxValue = 75
 PSLottery.TicketPrice = 100
 PSLottery.StartingJackpot = 1000
-PSLottery.Persistent = true
 PSLottery.MaxTickets = 2
 PSLottery.PointsName = "points"
-PSLottery.lastNumber = 0
 PSLottery.RoundsLeft = 10
 
 util.AddNetworkString("LotteryMenu")
@@ -19,24 +15,27 @@ print("PointShop Lottery Initialized")
 if !file.Exists( "lottery/jackpot.txt", "DATA" ) then
 	file.Write( "lottery/jackpot.txt", PSLottery.StartingJackpot )
 end
-local PersistentJackpot = tonumber(file.Read("lottery/jackpot.txt", "DATA"))
+PSLottery.Jackpot = tonumber(file.Read("lottery/jackpot.txt", "DATA")) or PSLottery.StartingJackpot
 
 if !file.Exists( "lottery/lastnumber.txt", "DATA" ) then
 	file.Write( "lottery/lastnumber.txt", PSLottery.lastNumber )
 end
-local LastNumber = tonumber(file.Read("lottery/lastnumber.txt", "DATA"))
+PSLottery.lastNumber = tonumber(file.Read("lottery/lastnumber.txt", "DATA")) or 0
 
-if file.Exists( "lottery/lastwinners.txt", "DATA" ) then
-	lastwinners = util.JSONToTable(file.Read("lottery/lastwinners.txt", "DATA"))
+if !file.Exists( "lottery/lastwinners.txt", "DATA" ) then
+	PSLottery.LastWinners = {}
+	file.Write( "lottery/lastwinners.txt", PSLottery.LastWinners )
 end
+PSLottery.LastWinners = util.JSONToTable(file.Read("lottery/lastwinners.txt", "DATA")) or {}
 
 if !file.Exists( "lottery/commonnumber.txt", "DATA" ) then
 	for a = 1, PSLottery.MaxValue + 1 do
-		table.insert(numberwinners, a, 1)
+		PSLottery.WinnerNumbers = {}
+		table.insert(PSLottery.WinnerNumbers, a, 1)
 	end
-	file.Write("lottery/commonnumber.txt", util.TableToJSON(numberwinners))
+	file.Write("lottery/commonnumber.txt", util.TableToJSON(PSLottery.WinnerNumbers))
 end
-local WinnerNumbers = util.JSONToTable(file.Read("lottery/commonnumber.txt", "DATA"))
+PSLottery.WinnerNumbers = util.JSONToTable(file.Read("lottery/commonnumber.txt", "DATA")) or 0
 
 PSLottery.Number = 0
 PSLottery.Tickets = {}
@@ -46,40 +45,18 @@ PSLottery.CanBuy = false
 PSLottery.Winrars = {}
 PSLottery.WinrarsNumber = 0
 
-if (PSLottery.Persistent) then
-	PSLottery.Jackpot = PersistentJackpot
-else
-	PSLottery.Jackpot = PSLottery.StartingJackpot
-end
-
-timer.Create( "LotteryTick", 1, 0, function() PSLottery:LotteryTick() end )
-timer.Create("LotterySave", 60, 0, function() file.Write( "lottery/jackpot.txt", PSLottery.Jackpot ) end )
-timer.Create( "LotteryInfos", 1, 0, function() PSLottery:LotteryInfos() end )
-
-function PSLottery:StartUp()
-	self.Tickets = {}
-	self.TicketNumber = 0
-	self.Participants = 0
-	self.Winrars = {}
-	self.WinrarsNumber = 0
-	self.WinrarsNumber = 0
-	self:GenerateNumeber()
-	for k,v in pairs(player.GetAll()) do
-		v:SetNWInt("TicketsBought",0)
-	end
-	self.CanBuy = true
-end
-
-function PSLottery:LotteryTick()
-	self:StartUp()
-	timer.Destroy( "LotteryTick" )
-end
+hook.Add("OnGamemodeLoaded", "PSLottery_StartUp", function()
+	PSLottery.CanBuy = true
+	PSLottery:LotteryInfos()
+end)
 
 function PSLRoundStart()
 	if PSLottery.RoundsLeft > 0 then
 		PSLottery.RoundsLeft = PSLottery.RoundsLeft - 1
 	end
+	PSLottery:LotteryInfos()
 end
+hook.Add("TTTPrepareRound", "PSLTTTRoundInitiateHook", PSLRoundStart)
 
 function PSLRoundEnd()
 	if PSLottery.RoundsLeft == 1 then
@@ -88,32 +65,26 @@ function PSLRoundEnd()
 		PSLottery:Drawing()
 	end
 	PSLottery:Message()
+	PSLottery:LotteryInfos()
 end
-
-hook.Add("TTTPrepareRound", "PSLTTTRoundInitiateHook", PSLRoundStart) -- TTT Round Start
-hook.Add("TTTEndRound", "PSLTTTRoundEndHook", PSLRoundEnd) -- TTT Round End
+hook.Add("TTTEndRound", "PSLTTTRoundEndHook", PSLRoundEnd)
 
 function PSLottery:LotteryInfos()
-	for k,v in pairs(player.GetAll()) do
-		net.Start( "LotteryMenu" )
-			net.WriteInt(PSLottery.TicketPrice, 16)
-			net.WriteInt(PSLottery.MaxTickets, 16)
-			net.WriteInt(PSLottery.RoundsLeft, 16)
-			net.WriteInt(PSLottery.Jackpot, 32)
-			net.WriteInt(LastNumber, 16)
-			net.WriteInt(PSLottery.Participants, 16)
-			net.WriteTable(lastwinners)
-			net.WriteTable(WinnerNumbers)
-		net.Send( v )
-	end
-end
-
-function PSLottery:GenerateNumeber()
-	self.Number = math.random(0, self.MaxValue)
+	net.Start( "LotteryInfos" )
+		net.WriteInt(PSLottery.TicketPrice, 16)
+		net.WriteInt(PSLottery.MaxTickets, 16)
+		net.WriteInt(PSLottery.RoundsLeft, 16)
+		net.WriteInt(PSLottery.Jackpot, 32)
+		net.WriteInt(PSLottery.lastNumber, 16)
+		net.WriteInt(PSLottery.Participants, 16)
+		net.WriteTable(PSLottery.LastWinners)
+		net.WriteTable(PSLottery.WinnerNumbers)
+	net.SendToServer()
 end
 
 function PSLottery:Drawing()
 	timer.Destroy( "LotteryMessage")
+	self.Number = math.random(0, self.MaxValue)
 	for k,v in pairs(self.Tickets) do
 		if (v.NumberChosen == self.Number) then
 			self.WinrarsNumber = self.WinrarsNumber + 1
@@ -123,15 +94,17 @@ function PSLottery:Drawing()
 		end
 	end
 	file.Write( "lottery/lastnumber.txt", self.Number )
-	table.insert(WinnerNumbers, self.Number + 1, WinnerNumbers[self.Number] + 1)
-	file.Write("lottery/commonnumber.txt", util.TableToJSON(WinnerNumbers))
+	table.insert(PSLottery.WinnerNumbers, self.Number + 1, PSLottery.WinnerNumbers[self.Number] + 1)
+	file.Write("lottery/commonnumber.txt", util.TableToJSON(PSLottery.WinnerNumbers))
 	if (self.WinrarsNumber > 0) then
 		self:Winrar()
+		PSLottery:LotteryInfos()
 	else
 		for k,v in pairs(player.GetAll()) do
 			v:PrintMessage( HUD_PRINTTALK , "Lottery: O número vencedor é "..self.Number)
 			v:PrintMessage( HUD_PRINTTALK , "Lottery: Ninguém ganhou! O premio está em "..self.Jackpot.." "..self.PointsName.."!")
 		end
+		PSLottery:LotteryInfos()
 	end
 	file.Write( "lottery/jackpot.txt", self.Jackpot )
 end
@@ -143,11 +116,11 @@ function PSLottery:Winrar()
 	for k,v in pairs(self.Winrars) do
 		v.Name:PS2_AddStandardPoints(PlayerPayout, "Ganhador da Loteria!!!", true, true)
 		local winnerset = {name = v.Name:Name(), number = self.Number, value = PlayerPayout, windate = os.date("%d/%m/%Y as %X", v.BuyDate)}
-		table.insert(lastwinners, 1, winnerset)
-		if table.Count(lastwinners) > 10 then
-			table.remove(lastwinners)
+		table.insert(PSLottery.LastWinners, 1, winnerset)
+		if table.Count(PSLottery.LastWinners) > 10 then
+			table.remove(PSLottery.LastWinners)
 		end
-		file.Write("lottery/lastwinners.txt", util.TableToJSON(lastwinners))
+		file.Write("lottery/lastwinners.txt", util.TableToJSON(PSLottery.LastWinners))
 		for i,p in pairs(player.GetAll()) do
 			p:PrintMessage( HUD_PRINTTALK , "Lottery: O número vencedor é "..self.Number)
 			p:PrintMessage( HUD_PRINTTALK , "Lottery: O jogador '"..v.Name:Name().."' Ganhou!!!, e recebeu "..PlayerPayout.." "..self.PointsName.."!")
@@ -163,9 +136,11 @@ function PSLottery:AddTicket(ply, number)
 	self.Tickets[self.TicketNumber].NumberChosen = number
 	self.Tickets[self.TicketNumber].BuyDate = os.time()
 	self.Jackpot = self.Jackpot + self.TicketPrice
+	file.Write( "lottery/jackpot.txt", PSLottery.Jackpot)
 	umsg.Start("LotteryMessage", ply)
 		umsg.String("Você comprou o ticket numero "..number)
 	umsg.End()
+	PSLottery:LotteryInfos()
 end
 
 function PSLottery:CheckNumber(ply, number)
@@ -175,7 +150,7 @@ function PSLottery:CheckNumber(ply, number)
 			for k,v in pairs(PSLottery.Tickets) do
 				if (v.PlayerEnt == ply && v.NumberChosen == number) then
 					IsGood = false
-					break;
+					break
 				end
 			end
 			if (IsGood) then

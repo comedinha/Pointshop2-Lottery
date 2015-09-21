@@ -1,5 +1,14 @@
 PSLottery = {}
 
+PSLottery.TicketPrice = 0
+PSLottery.MaxTickets = 0
+PSLottery.RoundsLeft = 0
+PSLottery.Jackpot = 0
+PSLottery.LastNumber = 0
+PSLottery.Participants = 0
+PSLottery.LastWinners = {}
+PSLottery.WinnerNumbers = {}
+
 function PSLottery:Init()
 	self:SetSkin(Pointshop2.Config.DermaSkin)
 	
@@ -105,16 +114,14 @@ function PSLottery:Init()
 	self.WinnerLabel:SetText("Últimos nove vencedores:")
 	self.WinnerLabel:SizeToContents()
 	
-	timer.Create("LotteryUpdate", 1, 0, function()
-		if self and IsValid(self) then
-			self:UpdatePSL()
-		else
-			timer.Destroy("LotteryUpdate")
-		end
-	end )
-	
 	Pointshop2.PSL = self
 end
+
+hook.Add("PS2_LotteryUpdate", "UpdateLottery", function()
+	if IsValid(Pointshop2.PSL) then
+		Pointshop2.PSL:UpdatePSL()
+	end
+end)
 
 function PSLottery:UpdatePSL()
 	self:SetSkin(Pointshop2.Config.DermaSkin)
@@ -195,7 +202,7 @@ function PSLottery:UpdatePSL()
 	self.WinnerLabel1:SizeToContents()
 end
 
-net.Receive( "LotteryMenu", function( len )
+net.Receive( "LotteryInfos", function( len )
 	PSLottery.TicketPrice = net.ReadInt(16)
 	PSLottery.MaxTickets = net.ReadInt(16)
 	PSLottery.RoundsLeft = net.ReadInt(16)
@@ -203,7 +210,8 @@ net.Receive( "LotteryMenu", function( len )
 	PSLottery.LastNumber = net.ReadInt(16)
 	PSLottery.Participants = net.ReadInt(16)
 	PSLottery.LastWinners = net.ReadTable()
-	PSLottery.WinnerNumber = net.ReadTable()
+	PSLottery.WinnerNumbers = net.ReadTable()
+	hook.Run("PS2_LotteryUpdate")
 end )
 
 function LotteryMessage(um)
